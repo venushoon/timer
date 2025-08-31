@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"/><title>아이콘 PNG 내보내기</title>
+<body style="font-family:system-ui;padding:16px">
+<h3>아이콘 PNG 생성기</h3>
+<p>동일 폴더의 <code>icon-192.svg</code>, <code>icon-512.svg</code>, <code>maskable-512.svg</code> 를 읽어 <code>icon-192.png</code>, <code>icon-512.png</code>, <code>maskable-512.png</code> 로 저장합니다.</p>
+<button id="go">PNG로 저장</button>
+<pre id="log"></pre>
+<script>
+async function svgToPng(svgPath, outName, size){
+  const res = await fetch(svgPath); const svg = await res.text();
+  const img = new Image(); const svg64 = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  await new Promise(r=>{ img.onload=r; img.src=svg64; });
+  const c=document.createElement('canvas'); c.width=size; c.height=size; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,size,size);
+  const a=document.createElement('a'); a.download=outName; a.href=c.toDataURL('image/png'); a.click();
+}
+const log=msg=>document.getElementById('log').textContent+=msg+'
+';
+
+document.getElementById('go').onclick=async()=>{
+  try{
+    await svgToPng('icon-192.svg','icon-192.png',192); log('✓ icon-192.png 생성');
+    await svgToPng('icon-512.svg','icon-512.png',512); log('✓ icon-512.png 생성');
+    await svgToPng('maskable-512.svg','maskable-512.png',512); log('✓ maskable-512.png 생성');
+    log('완료! 파일 다운로드를 확인하세요.');
+  }catch(e){ log('오류: '+e.message); }
+}
+</script>
+</body></html>
