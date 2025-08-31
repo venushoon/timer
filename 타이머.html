@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>학생 활동 타이머 — 오버런 메인표시/자동정지</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --fg:#eaf2ff; --acc:#7cc0ff; --muted:#8fa6c4; --card:#121823; --rail:#1b2431; --btn:#13243b;
+      --warn:#ff4d4f; --warn-strong:#ff1f27; --hold:#facc15; /* 노란색 */
+    }
+    [data-theme="light"]{ --bg:#f7fbff; --fg:#0e1b2b; --acc:#2457ff; --muted:#55657b; --card:#ffffff; --rail:#eaf2ff; --btn:#f0f5ff; --warn:#d9292f; --warn-strong:#c50f19; --hold:#f2b600 }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 Inter,Pretendard,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif; position:relative; overflow:hidden}
+
+    .wrap{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+
+    .clock{ position:relative; text-align:center; user-select:none; padding:24px 28px; border-radius:20px; background:linear-gradient(180deg,color-mix(in oklab,var(--bg) 85%,black),var(--bg)); border:1px solid color-mix(in oklab,var(--fg) 12%, transparent); box-shadow:0 10px 30px rgba(0,0,0,.28); cursor:grab }
+    .clock.dragging{cursor:grabbing}
+
+    .time{font-size:140px; line-height:1; font-variant-numeric:tabular-nums; font-weight:900; letter-spacing:.02em; transition:filter .15s ease,color .15s ease}
+    .time.small{font-size:88px}
+    .time.urgent{ color:var(--warn); filter:brightness(1.2) contrast(1.15) }
+    .time.critical{ color:var(--warn-strong); animation:blink 0.33s step-start infinite }
+    .time.hold{ color:var(--hold); text-shadow:0 0 16px color-mix(in oklab,var(--hold) 60%, transparent); }
+    @keyframes blink { 50%{ opacity:0.2 } }
+
+    .ms{font-size:.28em; opacity:.75; margin-left:.2em}
+
+    .settings-btn{ position:absolute; top:10px; right:10px; z-index:5; cursor:pointer; border-radius:50%; width:38px; height:38px; display:grid; place-items:center; border:1px solid color-mix(in oklab,var(--fg) 20%, transparent); background:var(--btn); color:var(--fg) }
+    .settings-btn:hover{ transform:translateY(-1px) }
+    .settings-btn svg{ width:20px; height:20px }
+
+    dialog{ border:none; padding:0; border-radius:16px; width:min(780px, 94vw); background:var(--card); color:var(--fg); box-shadow:0 20px 60px rgba(0,0,0,.45) }
+    .modal-head{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid color-mix(in oklab,var(--fg) 12%, transparent)}
+    .modal-head h2{margin:0; font-size:18px}
+    .modal-body{padding:16px; display:grid; gap:14px}
+    .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+    .group{background:var(--rail); border:1px solid color-mix(in oklab,var(--fg) 12%, transparent); border-radius:12px; padding:12px}
+    label.title{font-weight:800; opacity:.9; margin-right:6px}
+    select,input[type="number"],button.btn{padding:10px 12px; border-radius:10px; border:1px solid color-mix(in oklab,var(--fg) 20%, transparent); background:var(--btn); color:var(--fg); font-weight:800}
+    input[type="checkbox"]{ transform:scale(1.15) }
+    button.btn.primary{background:var(--acc); color:white; border-color:color-mix(in oklab,var(--acc) 60%, black)}
+    .modal-foot{display:flex; justify-content:flex-end; gap:10px; padding:14px 16px; border-top:1px solid color-mix(in oklab,var(--fg) 12%, transparent)}
+    dialog::backdrop{background:rgba(0,0,0,.5)}
+
+    .badge{font:12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New",monospace; opacity:.8; margin-left:8px}
+    .badge-row{ position:absolute; left:50%; transform:translateX(-50%); bottom:10px; display:flex; gap:10px; align-items:center; justify-content:center }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="wrap" id="clockWrap">
+    <div class="clock" id="clock" title="클릭: 시작/정지 · 더블클릭: 초기화 · 드래그: 이동">
+      <button class="settings-btn" id="btnOpen" aria-label="설정 열기">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14,12.94a7.43,7.43,0,0,0,.05-.94,7.43,7.43,0,0,0-.05-.94l2.11-1.65a.5.5,0,0,0,.12-.64l-2-3.46a.5.5,0,0,0-.6-.22l-2.49,1a7.28,7.28,0,0,0-1.63-.94l-.38-2.65A.5.5,0,0,0,13.83,2H10.17a.5.5,0,0,0-.49.41L9.3,5.06a7.28,7.28,0,0,0-1.63.94l-2.49-1a.5.5,0,0,0-.6.22l-2,3.46a.5.5,0,0,0,.12.64L4.86,11.06a7.43,7.43,0,0,0-.05.94,7.43,7.43,0,0,0,.05.94L2.75,14.59a.5.5,0,0,0-.12.64l2,3.46a.5.5,0,0,0,.6.22l2.49-1a7.28,7.28,0,0,0,1.63.94l.38,2.65a.5.5,0,0,0,.49.41h3.66a.5.5,0,0,0,.49-.41l.38-2.65a7.28,7.28,0,0,0,1.63-.94l2.49,1a.5.5,0,0,0,.6-.22l2-3.46a.5.5,0,0,0-.12-.64ZM12,15.5A3.5,3.5,1,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/></svg>
+      </button>
+      <div class="time" id="timeText">00:00:00<span class="ms">.00</span></div>
+      <div class="badge-row">
+        <div class="badge" id="sessionBadge" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="settings">
+    <div class="modal-head">
+      <h2>타이머 설정</h2>
+      <button class="btn" id="btnClose">닫기</button>
+    </div>
+    <div class="modal-body">
+      <div class="group">
+        <div class="row">
+          <label class="title" for="modeSelect">기능</label>
+          <select id="modeSelect" aria-label="기능 선택">
+            <option value="stopwatch">스톱워치</option>
+            <option value="timer">타이머</option>
+          </select>
+          <span class="badge" id="hint"></span>
+        </div>
+      </div>
+
+      <div class="group" id="timerBox">
+        <div class="row">
+          <label class="title">프리셋</label>
+          <button class="btn" data-preset="3">3분</button>
+          <button class="btn" data-preset="5">5분</button>
+          <button class="btn" data-preset="10">10분</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="title">직접 설정</label>
+          <label>분</label><input type="number" id="minIn" min="0" value="3" />
+          <label>초</label><input type="number" id="secIn" min="0" max="59" value="00" />
+          <button class="btn" id="btnApply">적용</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <label><input type="checkbox" id="chkSound" checked /> 종료 알림음</label>
+          <button class="btn" id="btnTheme">라이트/다크</button>
+          <button class="btn" id="btnBig">큰 숫자</button>
+          <button class="btn" id="btnFull">전체화면</button>
+        </div>
+      </div>
+
+      <div class="group" id="pomoBox">
+        <div class="row">
+          <label><input type="checkbox" id="chkPomo" /> 포모도로 사용(작업/휴식 자동 전환)</label>
+        </div>
+        <div class="row">
+          <label class="title">작업</label>
+          <label>분</label><input type="number" id="workMin" min="0" value="25" />
+          <label>초</label><input type="number" id="workSec" min="0" max="59" value="0" />
+          <label class="title" style="margin-left:14px">휴식</label>
+          <label>분</label><input type="number" id="breakMin" min="0" value="5" />
+          <label>초</label><input type="number" id="breakSec" min="0" max="59" value="0" />
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="chkAutoRestart" /> 완료 후 자동 재시작</label>
+          <label style="margin-left:10px">반복 횟수</label>
+          <input type="number" id="repeatCount" min="1" value="4" style="width:90px" />
+        </div>
+      </div>
+
+      <div class="group" id="overrunBox">
+        <div class="row">
+          <label><input type="checkbox" id="chkOverrunLimit" /> 오버런 자동 정지</label>
+          <label style="margin-left:10px">한도</label>
+          <input type="number" id="overMin" min="0" value="1" style="width:90px" />분
+          <input type="number" id="overSec" min="0" max="59" value="0" style="width:90px" />초
+        </div>
+        <span class="badge">0초 이후 메인 타임이 <strong>노란색으로 전환</strong>되며, 오버런 시간이 그대로 <strong>메인 숫자</strong>에 표시됩니다.</span>
+      </div>
+
+      <div class="group">
+        <div class="row">
+          <button class="btn primary" id="btnStart">시작</button>
+          <button class="btn" id="btnPause" disabled>일시정지</button>
+          <button class="btn" id="btnReset" disabled>초기화</button>
+          <span class="badge">스페이스바: 시작/정지 · 더블클릭: 초기화</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="btnOk">확인</button>
+    </div>
+  </dialog>
+
+  <script>
+    const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+    const timeText=$('#timeText'), clock=$('#clock'), wrap=$('#clockWrap'), badge=$('#sessionBadge');
+
+    const state={
+      mode: localStorage.getItem('mode')||'stopwatch',
+      theme: localStorage.getItem('theme')||'dark',
+      big: localStorage.getItem('big')==='1',
+      running:false, base:0, elapsed:0, justReset:true,
+      timerLength:(localStorage.getItem('tlen')?parseInt(localStorage.getItem('tlen')):3*60*1000),
+      alarmed:false,
+      pos: JSON.parse(localStorage.getItem('pos')||'null'),
+      pomo: JSON.parse(localStorage.getItem('pomo')||'null') || {enabled:false, work:25*60*1000, rest:5*60*1000, phase:'work', repeats:4},
+      remainingRepeats: parseInt(localStorage.getItem('pomo_left')||'0') || 4,
+      overrun: JSON.parse(localStorage.getItem('overrun')||'null') || {enabled:false, ms:60*1000}
+    };
+
+    if(state.pos){ wrap.style.left=state.pos.left+'px'; wrap.style.top=state.pos.top+'px'; wrap.style.transform='translate(0,0)'; }
+
+    const fmt=(ms)=>{ const sign=ms<0?'-':''; ms=Math.abs(ms); const h=Math.floor(ms/3600000), m=Math.floor(ms%3600000/60000), s=Math.floor(ms%60000/1000), cs=Math.floor(ms%1000/10); return `${sign}${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}<span class="ms">.${String(cs).padStart(2,'0')}</span>` };
+
+    function updateBadge(){
+      if(state.mode!=='timer'){ badge.textContent=''; return; }
+      if(state.pomo.enabled){ badge.textContent = (state.pomo.phase==='work'?'작업':'휴식') + ` · 남은 반복: ${state.remainingRepeats}`; }
+      else { badge.textContent='타이머'; }
+    }
+
+    function setMode(m){ state.mode=m; localStorage.setItem('mode',m); $('#modeSelect').value=m; $('#timerBox').style.display = m==='timer'? 'block':'none'; $('#hint').textContent = m==='timer'? '카운트다운/오버런 표시' : '경과 시간 표시'; updateBadge(); reset(); }
+    function setTheme(th){ document.body.setAttribute('data-theme', th); state.theme=th; localStorage.setItem('theme', th); }
+    function setBig(b){ state.big=b; localStorage.setItem('big', b?'1':'0'); timeText.classList.toggle('small', !b); }
+
+    function loadPomoToUI(){ $('#chkPomo').checked = state.pomo.enabled; const w=state.pomo.work, r=state.pomo.rest; $('#workMin').value=Math.floor(w/60000); $('#workSec').value=Math.floor((w%60000)/1000); $('#breakMin').value=Math.floor(r/60000); $('#breakSec').value=Math.floor((r%60000)/1000); $('#chkAutoRestart').checked = true; $('#repeatCount').value = state.pomo.repeats; }
+    function applyPomoFromUI(){ const w=(parseInt($('#workMin').value||'0')*60 + parseInt($('#workSec').value||'0'))*1000; const r=(parseInt($('#breakMin').value||'0')*60 + parseInt($('#breakSec').value||'0'))*1000; const rep=Math.max(1, parseInt($('#repeatCount').value||'1')); state.pomo.enabled=$('#chkPomo').checked; state.pomo.work=w; state.pomo.rest=r; state.pomo.repeats=rep; localStorage.setItem('pomo', JSON.stringify(state.pomo)); state.remainingRepeats=rep; localStorage.setItem('pomo_left', String(state.remainingRepeats)); updateBadge(); if(state.pomo.enabled){ state.pomo.phase='work'; setTimerLength(w); } }
+
+    function loadOverToUI(){ $('#chkOverrunLimit').checked=!!state.overrun.enabled; const ms=state.overrun.ms||0; $('#overMin').value=Math.floor(ms/60000); $('#overSec').value=Math.floor((ms%60000)/1000); }
+    function applyOverFromUI(){ const ms=(Math.max(0,parseInt($('#overMin').value||'0'))*60 + Math.max(0,parseInt($('#overSec').value||'0'))) * 1000; state.overrun.enabled=$('#chkOverrunLimit').checked; state.overrun.ms=ms; localStorage.setItem('overrun', JSON.stringify(state.overrun)); }
+
+    function setTimerLength(ms){ state.timerLength=ms; localStorage.setItem('tlen', String(ms)); if(state.mode==='timer') reset(); }
+
+    const btnStart=$('#btnStart'), btnPause=$('#btnPause'), btnReset=$('#btnReset');
+    function start(){ if(state.running) return; state.running=true; state.justReset=false; btnStart.disabled=true; btnPause.disabled=false; btnReset.disabled=false; state.alarmed=false; const now=performance.now(); if(state.mode==='stopwatch'){ state.base=now - state.elapsed; } else { const remain = state.timerLength - state.elapsed; state.base = now + remain; } raf(); }
+    function pause(){ if(!state.running) return; state.running=false; btnStart.disabled=false; btnPause.disabled=true; if(state.mode==='stopwatch'){ state.elapsed = performance.now() - state.base; } else { state.elapsed = state.timerLength - (state.base - performance.now()); } }
+    function reset(){ state.running=false; state.elapsed=0; state.base=0; state.alarmed=false; state.justReset=true; btnStart.disabled=false; btnPause.disabled=true; btnReset.disabled=true; timeText.classList.remove('urgent','critical','hold'); render(); }
+
+    function render(){
+      if(state.mode==='stopwatch'){
+        const ms = state.running ? performance.now()-state.base : state.elapsed;
+        timeText.innerHTML = fmt(ms);
+        return;
+      }
+      const now = performance.now();
+      const remain = state.base - now; // 남은 시간(음수면 오버런)
+      const over = Math.max(0, -remain);
+
+      // ▶ Idle(초기화 직후) 상태: 00:00으로 고정 표시, 노란색 아님
+      if(state.justReset && !state.running){
+        timeText.innerHTML = fmt(0);
+        timeText.classList.remove('hold','urgent','critical');
+        return;
+      }
+
+      if(remain > 0){
+        timeText.innerHTML = fmt(remain);
+        timeText.classList.remove('hold');
+      } else {
+        timeText.innerHTML = fmt(over); // 0 이후 오버런을 메인에 표시
+        timeText.classList.add('hold');
+      }
+
+      if(remain>0 && remain<=3000){ timeText.classList.add('critical'); timeText.classList.remove('urgent'); }
+      else if(remain>3000 && remain<=5000){ timeText.classList.add('urgent'); timeText.classList.remove('critical'); }
+      else { timeText.classList.remove('urgent','critical'); }
+
+      if(remain<=0){
+        if(!state.alarmed){ state.alarmed=true; if($('#chkSound').checked) beep(); if(state.pomo.enabled){ onTimerComplete(); } }
+        if(state.overrun.enabled && over >= (state.overrun.ms||0) && state.running){ pause(); }
+      } else {
+        state.alarmed=false;
+      }
+    }
+
+    function onTimerComplete(){
+      const auto = $('#chkAutoRestart').checked;
+      if(state.pomo.enabled){
+        if(state.pomo.phase==='work'){
+          state.pomo.phase='rest'; setTimerLength(state.pomo.rest); updateBadge(); if(auto){ start(); } else { reset(); }
+        } else {
+          state.remainingRepeats = Math.max(0, state.remainingRepeats-1); localStorage.setItem('pomo_left', String(state.remainingRepeats));
+          if(state.remainingRepeats>0){ state.pomo.phase='work'; setTimerLength(state.pomo.work); updateBadge(); if(auto){ start(); } else { reset(); } }
+          else { state.pomo.phase='work'; updateBadge(); reset(); }
+        }
+      }
+    }
+
+    let audioCtx=null; function beep(){ try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); const notes=[880,988,1046]; let t=audioCtx.currentTime; notes.forEach((f)=>{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; o.connect(g); g.connect(audioCtx.destination); const dur=0.18; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.22,t+0.02); g.gain.linearRampToValueAtTime(0,t+dur); o.start(t); o.stop(t+dur); t+=0.22; }); }catch(e){ console.warn(e); } }
+
+    let rId=null; function raf(){ if(!state.running){ cancelAnimationFrame(rId); return; } render(); rId=requestAnimationFrame(raf); }
+
+    const minIn=$('#minIn'), secIn=$('#secIn'); function applyTimer(){ const m=Math.max(0, parseInt(minIn.value||'0')); const s=Math.max(0, Math.min(59, parseInt(secIn.value||'0'))); setTimerLength((m*60+s)*1000); }
+    $$('#timerBox [data-preset]').forEach(b=> b.addEventListener('click', (e)=>{ e.stopPropagation(); const minutes=parseInt(b.dataset.preset); minIn.value=String(minutes); secIn.value='0'; applyTimer(); }));
+
+    const dlg=$('#settings');
+    $('#btnOpen').addEventListener('click', (e)=>{ e.stopPropagation(); dlg.showModal(); });
+    $('#btnClose').addEventListener('click', ()=> dlg.close());
+    $('#btnOk').addEventListener('click', ()=> dlg.close());
+
+    $('#modeSelect').addEventListener('change', e=> setMode(e.target.value));
+    $('#btnApply').addEventListener('click', applyTimer);
+    $('#btnTheme').addEventListener('click', ()=> setTheme(state.theme==='dark'?'light':'dark'));
+    $('#btnBig').addEventListener('click', ()=> setBig(!state.big));
+    $('#btnFull').addEventListener('click', async ()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(e){ console.warn(e);} });
+
+    $('#chkOverrunLimit').addEventListener('change', applyOverFromUI);
+    $('#overMin').addEventListener('change', applyOverFromUI);
+    $('#overSec').addEventListener('change', applyOverFromUI);
+
+    btnStart.addEventListener('click', start); btnPause.addEventListener('click', pause); btnReset.addEventListener('click', reset);
+
+    // 클릭/더블클릭 처리 + 드래그 억제
+    let singleTimer=null, suppressNextClick=false, moved=false;
+    clock.addEventListener('click', (ev)=>{
+      if(ev.target.closest('#btnOpen')) return;
+      if(suppressNextClick){ suppressNextClick=false; return; }
+      if(ev.detail===2){ if(singleTimer){ clearTimeout(singleTimer); singleTimer=null; } reset(); return; }
+      if(singleTimer) clearTimeout(singleTimer);
+      singleTimer=setTimeout(()=>{ singleTimer=null; state.running? pause(): start(); }, 220);
+    });
+
+    let dragging=false, startX=0, startY=0, origX=0, origY=0; function getPoint(e){ return (e.touches&&e.touches[0])? {x:e.touches[0].clientX, y:e.touches[0].clientY} : {x:e.clientX, y:e.clientY}; }
+    function onDown(e){ if(e.target.closest('#btnOpen')) return; dragging=true; moved=false; clock.classList.add('dragging'); const p=getPoint(e); startX=p.x; startY=p.y; const rect=wrap.getBoundingClientRect(); origX=rect.left; origY=rect.top; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); document.addEventListener('touchmove', onMove, {passive:false}); document.addEventListener('touchend', onUp); }
+    function onMove(e){ if(!dragging) return; e.preventDefault(); const p=getPoint(e); const dx=p.x-startX, dy=p.y-startY; if(Math.abs(dx)>3 || Math.abs(dy)>3) moved=true; let nx=origX+dx, ny=origY+dy; const vw=window.innerWidth, vh=window.innerHeight, rw=wrap.offsetWidth, rh=wrap.offsetHeight; nx=Math.max(0, Math.min(vw-rw, nx)); ny=Math.max(0, Math.min(vh-rh, ny)); wrap.style.left=nx+'px'; wrap.style.top=ny+'px'; wrap.style.transform='translate(0,0)'; }
+    function onUp(){ if(!dragging) return; dragging=false; clock.classList.remove('dragging'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onUp); if(moved){ suppressNextClick=true; } const rect=wrap.getBoundingClientRect(); localStorage.setItem('pos', JSON.stringify({left:rect.left, top:rect.top})); }
+    clock.addEventListener('mousedown', onDown); clock.addEventListener('touchstart', onDown, {passive:false});
+
+    // 키보드: 스페이스바 시작/정지
+    window.addEventListener('keydown', (e)=>{ const tag=(e.target||{}).tagName; if(['INPUT','TEXTAREA','SELECT'].includes(tag)) return; if(e.code==='Space'){ e.preventDefault(); state.running? pause(): start(); }});
+
+    setTheme(state.theme); setBig(state.big); setMode(state.mode); loadPomoToUI(); loadOverToUI(); updateBadge();
+    const initM=Math.floor(state.timerLength/60000), initS=Math.floor((state.timerLength%60000)/1000); $('#minIn').value=String(initM); $('#secIn').value=String(initS).padStart(2,'0');
+    render();
+  </script>
+</body>
+</html>
