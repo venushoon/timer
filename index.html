@@ -49,6 +49,17 @@
     .badge{font:12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New",monospace; opacity:.8; margin-left:8px}
     .badge-row{ position:absolute; left:50%; transform:translateX(-50%); bottom:10px; display:flex; gap:10px; align-items:center; justify-content:center }
   </style>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b0f14" />
+<link rel="icon" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js');
+    });
+  }
+</script>
 </head>
 <body data-theme="dark">
   <div class="wrap" id="clockWrap">
@@ -288,5 +299,12 @@
     const initM=Math.floor(state.timerLength/60000), initS=Math.floor((state.timerLength%60000)/1000); $('#minIn').value=String(initM); $('#secIn').value=String(initS).padStart(2,'0');
     render();
   </script>
+<button id="installBtn" style="position:fixed;left:12px;bottom:12px;display:none;padding:10px 14px;border-radius:10px;border:1px solid #2a3b54;background:#13243b;color:#eaf2ff;font-weight:800;cursor:pointer">앱 설치</button>
+<script>
+  let deferredPrompt; const btn=document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', (e)=>{ e.preventDefault(); deferredPrompt=e; btn.style.display='block'; });
+  btn.addEventListener('click', async ()=>{ if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; btn.style.display='none'; deferredPrompt=null; });
+  window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
+</script>
 </body>
 </html>
